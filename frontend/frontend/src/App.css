@@ -78,15 +78,27 @@ body {
 
 .driver-row {
   display: grid;
-  grid-template-columns: 40px 10px 60px 80px 100px 80px 1fr;
+  /* Nova distribuição de espaço para incluir o nome do piloto (140px) */
+  grid-template-columns: 40px 10px 50px 140px 80px 100px 80px 1fr;
   align-items: center;
   padding: 10px 15px;
   border-bottom: 1px solid #2a2a2a;
   transition: all 0.3s ease-in-out;
+  cursor: pointer;
 }
 
 .driver-row.in-pit {
   background: #4a4a00;
+}
+
+/* Novo estilo para o nome completo */
+.driver-name {
+  font-size: 15px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 10px;
 }
 
 .driver-pos {
@@ -186,4 +198,130 @@ body {
   line-height: 18px;
   font-size: 12px;
   font-weight: bold;
+}
+
+/* Adicione no final do App.css */
+
+/* Tornar as linhas da tabela clicáveis */
+.driver-row {
+  cursor: pointer;
+}
+.driver-row:hover {
+  background-color: #2a2a2a;
+}
+.driver-row.selected {
+  background-color: #2c2c2c;
+  border-left: 4px solid #ffffff;
+}
+
+/* Coluna Direita (Legenda + Telemetria) */
+.right-column {
+  flex: 1 1 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: sticky;
+  top: 20px;
+}
+
+/* Remover o sticky antigo da legenda, pois agora a coluna inteira é sticky */
+.legend-panel {
+  position: static; 
+}
+
+/* Dashboard de Telemetria */
+.telemetry-panel {
+  background: #1e1e1e;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.telemetry-panel h3 {
+  margin-top: 0;
+  border-bottom: 1px solid #333;
+  width: 100%;
+  padding-bottom: 10px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.telemetry-data {
+  display: flex;
+  gap: 30px;
+  margin-top: 20px;
+  width: 100%;
+  justify-content: space-around;
+}
+
+.pedals {
+  display: flex;
+  gap: 15px;
+}
+
+.pedal-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.pedal-bar {
+  width: 40px;
+  height: 150px;
+  background: #333;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.pedal-fill {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  transition: height 0.1s linear; /* Animação suave a subir e descer */
+}
+
+.pedal-fill.throttle { background: #00c853; } /* Verde para Acelerador */
+.pedal-fill.brake { background: #e10600; }    /* Vermelho para Travão */
+
+.speed-gear {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+}
+
+.speed-display {
+  font-family: monospace;
+  font-size: 48px;
+  font-weight: bold;
+  color: #fff;
+  line-height: 1;
+  text-align: center;
+}
+
+.speed-display span {
+  display: block;
+  font-size: 16px;
+  color: #aaa;
+  font-family: sans-serif;
+}
+
+.gear-display {
+  width: 60px;
+  height: 60px;
+  border: 3px solid #ffb300;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 32px;
+  font-weight: bold;
+  color: #ffb300;
 }
