@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 
+// =========================================
+// Componente: Pneus
+// =========================================
 const TyreBadge = ({ tyre, age }) => {
   let color = '#FFFFFF';
   let label = 'H'; 
@@ -18,6 +21,9 @@ const TyreBadge = ({ tyre, age }) => {
   );
 };
 
+// =========================================
+// Componente: Legenda
+// =========================================
 const LegendPanel = () => (
   <div className="legend-panel">
     <h3>📖 Legenda</h3>
@@ -35,12 +41,14 @@ const LegendPanel = () => (
   </div>
 );
 
+// =========================================
+// Componente: Painel de Telemetria
+// =========================================
 const TelemetryPanel = ({ driver }) => {
   if (!driver) return null;
 
   return (
     <div className="telemetry-panel">
-      {/* Agora mostra o nome completo do piloto na telemetria */}
       <h3>📡 Telemetria - {driver.name}</h3>
       <div className="telemetry-data">
         <div className="pedals">
@@ -50,7 +58,6 @@ const TelemetryPanel = ({ driver }) => {
             </div>
             <span style={{ fontSize: '12px', color: '#aaa', fontWeight: 'bold' }}>TRAVÃO</span>
           </div>
-
           <div className="pedal-box">
             <div className="pedal-bar">
               <div className="pedal-fill throttle" style={{ height: `${driver.throttle}%` }}></div>
@@ -58,7 +65,6 @@ const TelemetryPanel = ({ driver }) => {
             <span style={{ fontSize: '12px', color: '#aaa', fontWeight: 'bold' }}>ACEL.</span>
           </div>
         </div>
-
         <div className="speed-gear">
           <div className="speed-display">
             {Math.round(driver.speed)}
@@ -73,11 +79,111 @@ const TelemetryPanel = ({ driver }) => {
   );
 };
 
+// =========================================
+// Componente: Mapa da Pista
+// =========================================
+const TrackMap = ({ drivers, metadata, trackShape, selectedDriverCode }) => {
+  const [bounds, setBounds] = useState({ minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+
+  useEffect(() => {
+    let { minX, maxX, minY, maxY } = bounds;
+    let changed = false;
+
+    if (trackShape && trackShape.length > 0) {
+      trackShape.forEach(p => {
+        if (p.x < minX) { minX = p.x; changed = true; }
+        if (p.x > maxX) { maxX = p.x; changed = true; }
+        if (p.y < minY) { minY = p.y; changed = true; }
+        if (p.y > maxY) { maxY = p.y; changed = true; }
+      });
+    } else {
+      Object.values(drivers).forEach(d => {
+        if (d.x < minX) { minX = d.x; changed = true; }
+        if (d.x > maxX) { maxX = d.x; changed = true; }
+        if (d.y < minY) { minY = d.y; changed = true; }
+        if (d.y > maxY) { maxY = d.y; changed = true; }
+      });
+    }
+
+    if (changed && minX !== Infinity) {
+      setBounds({ minX, maxX, minY, maxY });
+    }
+  }, [drivers, trackShape]);
+
+  if (bounds.minX === Infinity) return <div>A carregar mapa...</div>;
+
+  const rangeX = bounds.maxX - bounds.minX || 1;
+  const rangeY = bounds.maxY - bounds.minY || 1;
+  const maxRange = Math.max(rangeX, rangeY);
+  const offsetX = (maxRange - rangeX) / 2;
+  const offsetY = (maxRange - rangeY) / 2;
+
+  // Variáveis de escala e margem para não cortar as bolinhas
+  const scale = 90;
+  const margin = 5;
+
+  const polylinePoints = trackShape ? trackShape.map(p => {
+    const x = (((p.x - bounds.minX + offsetX) / maxRange) * scale) + margin;
+    const y = (((1 - ((p.y - bounds.minY + offsetY) / maxRange))) * scale) + margin;
+    return `${x},${y}`;
+  }).join(" ") : "";
+
+  return (
+    <div className="track-map-container">
+      <h3>📍 Mapa da Pista</h3>
+      <div className="track-canvas-wrapper">
+        
+        {polylinePoints && (
+          <svg viewBox="0 0 100 100" style={{ position: 'absolute', width: '100%', height: '100%', zIndex: 1 }}>
+            <polygon 
+              points={polylinePoints} 
+              fill="none" 
+              stroke="#555" 
+              strokeWidth="1.5" 
+              strokeLinejoin="round" 
+            />
+          </svg>
+        )}
+
+        {Object.entries(drivers).map(([code, d]) => {
+          const left = (((d.x - bounds.minX + offsetX) / maxRange) * scale) + margin;
+          const top = (((1 - ((d.y - bounds.minY + offsetY) / maxRange))) * scale) + margin;
+          
+          const meta = metadata && metadata[code] ? metadata[code] : { color: '#888' };
+          const isSelected = code === selectedDriverCode;
+
+          if (d.in_pit) return null;
+
+          return (
+            <div 
+              key={code}
+              className={`car-dot ${isSelected ? 'selected' : ''}`}
+              style={{
+                left: `${left}%`,
+                top: `${top}%`,
+                backgroundColor: meta.color
+              }}
+              title={code}
+            >
+              {code.substring(0, 2)}
+            </div>
+          );
+        })}
+
+      </div>
+    </div>
+  );
+};
+
+// =========================================
+// Componente Principal: App
+// =========================================
 function App() {
   const [raceData, setRaceData] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [selectedDriverCode, setSelectedDriverCode] = useState(null);
 
+  // Conexão WebSocket
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:9999');
     ws.onopen = () => setIsConnected(true);
@@ -86,6 +192,7 @@ function App() {
     return () => ws.close();
   }, []);
 
+  // Selecionar o líder automaticamente ao carregar
   useEffect(() => {
     if (raceData && !selectedDriverCode) {
       const leader = Object.entries(raceData.drivers).find(([_, data]) => data.position === 1);
@@ -104,7 +211,6 @@ function App() {
     .sort((a, b) => a.position - b.position);
 
   const selectedDriverData = raceData.drivers[selectedDriverCode];
-  // Pega os dados dinâmicos do piloto selecionado
   const selectedDriverMeta = raceData.metadata && raceData.metadata[selectedDriverCode] 
     ? raceData.metadata[selectedDriverCode] 
     : { name: selectedDriverCode };
@@ -113,6 +219,7 @@ function App() {
     <div className="app-container">
       <div className="layout">
         
+        {/* === Lado Esquerdo: Tabela de Classificação === */}
         <div className="leaderboard">
           <header className="header">
             <h1>🏎️ Leaderboard</h1>
@@ -124,8 +231,6 @@ function App() {
 
           <div className="table-container">
             {driversList.map((driver) => {
-              
-              // === LEITURA DINÂMICA DA COR E NOME ===
               const driverMeta = raceData.metadata && raceData.metadata[driver.code] 
                 ? raceData.metadata[driver.code] 
                 : { color: '#888', name: driver.code };
@@ -142,10 +247,7 @@ function App() {
                   <div className="driver-pos">{driver.position}</div>
                   <div style={{ width: '4px', height: '24px', background: teamColor, borderRadius: '2px' }}></div>
                   <div className="driver-code">{driver.code}</div>
-                  
-                  {/* Novo bloco exibindo o nome completo do piloto */}
                   <div className="driver-name" title={driverMeta.name}>{driverMeta.name}</div>
-                  
                   <TyreBadge tyre={driver.tyre} age={driver.tyre_life} />
                   
                   <div className="driver-speed">
@@ -166,9 +268,22 @@ function App() {
           </div>
         </div>
 
+        {/* === Lado Direito: Mapa, Telemetria e Legenda === */}
         <div className="right-column">
+          
+          <TrackMap 
+            drivers={raceData.drivers} 
+            metadata={raceData.metadata} 
+            trackShape={raceData.track_shape} 
+            selectedDriverCode={selectedDriverCode} 
+          />
+
+          <TelemetryPanel 
+            driver={selectedDriverData ? { code: selectedDriverCode, name: selectedDriverMeta.name, ...selectedDriverData } : null} 
+          />
+
           <LegendPanel />
-          <TelemetryPanel driver={selectedDriverData ? { code: selectedDriverCode, name: selectedDriverMeta.name, ...selectedDriverData } : null} />
+
         </div>
 
       </div>

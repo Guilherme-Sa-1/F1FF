@@ -14,7 +14,22 @@ def main(year, round_number, session_type='R'):
     race_telemetry = get_race_telemetry(session, session_type=session_type)
     frames = race_telemetry['frames']
     
-    # === NOVO: Extraindo Nomes e Cores Oficiais Dinamicamente ===
+    # === NOVO: Extraindo o Desenho da Pista ===
+    print("Calculando o traçado da pista...")
+    try:
+        # Pegamos a telemetria da volta mais rápida para desenhar o traçado
+        fastest_lap = session.laps.pick_fastest()
+        tel = fastest_lap.get_telemetry()
+        # Pega 1 a cada 4 pontos para o formato ficar leve na rede, mas com ótima resolução
+        track_shape = [
+            {"x": float(x), "y": float(y)} 
+            for x, y in zip(tel['X'].to_numpy()[::4], tel['Y'].to_numpy()[::4])
+        ]
+    except Exception as e:
+        print("Aviso: Não foi possível carregar o traçado da pista.")
+        track_shape = []
+
+    # === Extraindo Nomes e Cores Oficiais Dinamicamente ===
     driver_metadata = {}
     driver_colors_rgb = race_telemetry.get('driver_colors', {})
     
@@ -23,7 +38,6 @@ def main(year, round_number, session_type='R'):
         code = info["Abbreviation"]
         full_name = info["FullName"]
         
-        # Pega a cor RGB e converte para código Hexadecimal (#ffffff) para a web
         rgb = driver_colors_rgb.get(code, (128, 128, 128))
         hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
         
@@ -31,7 +45,6 @@ def main(year, round_number, session_type='R'):
             "name": full_name,
             "color": hex_color
         }
-    # ============================================================
 
     print(f"Total de frames carregados: {len(frames)}")
 
@@ -46,8 +59,8 @@ def main(year, round_number, session_type='R'):
         dt = 1 / fps
         
         for frame in frames:
-            # Injeta os metadados no frame antes de o enviar para o React
             frame['metadata'] = driver_metadata
+            frame['track_shape'] = track_shape  # <--- Injeta a pista no frame
             server.broadcast(frame)
             time.sleep(dt) 
             
