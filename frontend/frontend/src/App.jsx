@@ -118,7 +118,6 @@ const TrackMap = ({ drivers, metadata, trackShape, selectedDriverCode }) => {
   const offsetX = (maxRange - rangeX) / 2;
   const offsetY = (maxRange - rangeY) / 2;
 
-  // Variáveis de escala e margem para não cortar as bolinhas
   const scale = 90;
   const margin = 5;
 
@@ -182,17 +181,35 @@ function App() {
   const [raceData, setRaceData] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [selectedDriverCode, setSelectedDriverCode] = useState(null);
+  
+  // Estados para o formulário de seleção
+  const [year, setYear] = useState('2024');
+  const [round, setRound] = useState('1');
+  const [isLive, setIsLive] = useState(false);
 
-  // Conexão WebSocket
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:9999');
-    ws.onopen = () => setIsConnected(true);
-    ws.onclose = () => setIsConnected(false);
-    ws.onmessage = (event) => setRaceData(JSON.parse(event.data));
-    return () => ws.close();
-  }, []);
+    if (!isLive) return; 
 
-  // Selecionar o líder automaticamente ao carregar
+    const ws = new WebSocket('ws://localhost:9999');
+    
+    ws.onopen = () => {
+      setIsConnected(true);
+      // Envia os parâmetros escolhidos (agora corretamente com parseInt)
+      ws.send(JSON.stringify({ year: parseInt(year, 10), round: parseInt(round, 10) }));
+    };
+    
+    ws.onclose = () => {
+      setIsConnected(false);
+      setIsLive(false);
+      setRaceData(null);
+    };
+    
+    ws.onmessage = (event) => setRaceData(JSON.parse(event.data));
+    
+    return () => ws.close();
+  }, [isLive, year, round]);
+
+  // Selecionar o líder automaticamente ao carregar dados
   useEffect(() => {
     if (raceData && !selectedDriverCode) {
       const leader = Object.entries(raceData.drivers).find(([_, data]) => data.position === 1);
@@ -200,8 +217,52 @@ function App() {
     }
   }, [raceData, selectedDriverCode]);
 
+  // Tela Inicial de Seleção 
+  if (!isLive) {
+    return (
+      <div className="loading-screen" style={{ flexDirection: 'column', gap: '20px' }}>
+        <h1 style={{ textTransform: 'uppercase', letterSpacing: '2px', margin: 0 }}>🏎️ FormulaFans</h1>
+        <div style={{ background: '#1e1e1e', padding: '30px', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', gap: '15px', minWidth: '300px' }}>
+          <h3 style={{ margin: 0, borderBottom: '1px solid #333', paddingBottom: '10px' }}>Selecionar Corrida</h3>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <label style={{ fontSize: '12px', color: '#aaa', fontWeight: 'bold' }}>ANO</label>
+            <input 
+              type="number" 
+              value={year} 
+              onChange={(e) => setYear(e.target.value)}
+              style={{ background: '#111', border: '1px solid #333', color: '#fff', padding: '10px', borderRadius: '4px', fontSize: '16px' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <label style={{ fontSize: '12px', color: '#aaa', fontWeight: 'bold' }}>ETAPA (ROUND)</label>
+            <input 
+              type="number" 
+              value={round} 
+              onChange={(e) => setRound(e.target.value)}
+              style={{ background: '#111', border: '1px solid #333', color: '#fff', padding: '10px', borderRadius: '4px', fontSize: '16px' }}
+            />
+          </div>
+
+          <button 
+            onClick={() => setIsLive(true)}
+            style={{ background: '#e10600', color: '#fff', border: 'none', padding: '12px', borderRadius: '4px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', textTransform: 'uppercase' }}
+          >
+            Carregar Telemetria
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Tela de transição enquanto o WebSocket conecta
   if (!isConnected) {
-    return <div className="loading-screen"><h2>⏳ A aguardar ligação ao servidor...</h2></div>;
+    return (
+      <div className="loading-screen">
+        <h2>⏳ A ligar ao servidor da F1 ({year} - Etapa {round})...</h2>
+      </div>
+    );
   }
 
   if (!raceData) return <div className="loading-screen"><h2>A processar corrida...</h2></div>;
@@ -222,7 +283,17 @@ function App() {
         {/* === Lado Esquerdo: Tabela de Classificação === */}
         <div className="leaderboard">
           <header className="header">
-            <h1>🏎️ Leaderboard</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <button 
+                onClick={() => setIsLive(false)}
+                style={{ background: '#333', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+              >
+                Voltar
+              </button>
+              <h1 style={{ margin: 0, fontSize: '22px', textTransform: 'uppercase', letterSpacing: '2px' }}>
+                🏎️ {raceData.event_name || 'Leaderboard'}
+              </h1>
+            </div>
             <div className="stats-group">
               <span className="stat-badge">Volta Líder: <strong>{raceData.lap}</strong></span>
               <span className="stat-badge red">T: {raceData.t.toFixed(1)}s</span>

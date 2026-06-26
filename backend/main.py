@@ -1,86 +1,79 @@
 import sys
-import time
+import json
+import asyncio
+import websockets
+import fastf1
 from src.f1_data import load_session, get_race_telemetry, enable_cache
-from src.services.stream import TelemetryStreamServer
 
-def main(year, round_number, session_type='R'):
-    print(f"Iniciando Backend FormulaFans: F1 {year} Round {round_number} Sessão '{session_type}'")
-    
-    enable_cache()
-    session = load_session(year, round_number, session_type)
-    print(f"Sessão carregada: {session.event['EventName']} - {session.event['RoundNumber']}")
+enable_cache()
 
-    print("Extraindo e processando telemetria...")
-    race_telemetry = get_race_telemetry(session, session_type=session_type)
-    frames = race_telemetry['frames']
-    
-    # === NOVO: Extraindo o Desenho da Pista ===
-    print("Calculando o traçado da pista...")
+async def stream_telemetry(websocket):
+    print("\n🟢 Cliente conectado! Aguardando seleção...")
     try:
-        # Pegamos a telemetria da volta mais rápida para desenhar o traçado
-        fastest_lap = session.laps.pick_fastest()
-        tel = fastest_lap.get_telemetry()
-        # Pega 1 a cada 4 pontos para o formato ficar leve na rede, mas com ótima resolução
-        track_shape = [
-            {"x": float(x), "y": float(y)} 
-            for x, y in zip(tel['X'].to_numpy()[::4], tel['Y'].to_numpy()[::4])
-        ]
-    except Exception as e:
-        print("Aviso: Não foi possível carregar o traçado da pista.")
-        track_shape = []
+        # 1. Espera a mensagem do React com a escolha da corrida
+        msg = await websocket.recv()
+        config = json.loads(msg)
+        year = int(config.get('year', 2024))
+        round_number = int(config.get('round', 1))
+        session_type = 'R'
 
-    # === Extraindo Nomes e Cores Oficiais Dinamicamente ===
-    driver_metadata = {}
-    driver_colors_rgb = race_telemetry.get('driver_colors', {})
-    
-    for drv_num in session.drivers:
-        info = session.get_driver(drv_num)
-        code = info["Abbreviation"]
-        full_name = info["FullName"]
+        print(f"⚙️ Processando: {year} Round {round_number}...")
         
-        rgb = driver_colors_rgb.get(code, (128, 128, 128))
-        hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-        
-        driver_metadata[code] = {
-            "name": full_name,
-            "color": hex_color
-        }
+        # 2. Carrega a sessão escolhida dinamicamente
+        session = load_session(year, round_number, session_type)
+        session.load()
+        event_name = session.event['EventName']
+        print(f"✅ Sessão carregada: {event_name}")
 
-    print(f"Total de frames carregados: {len(frames)}")
+        race_telemetry = get_race_telemetry(session, session_type=session_type)
+        frames = race_telemetry['frames']
 
-    host = 'localhost'
-    port = 9999
-    server = TelemetryStreamServer(host=host, port=port)
-    server.start()
-    print(f"Servidor de telemetria rodando em {host}:{port}")
+        # 3. Desenho da pista
+        try:
+            fastest_lap = session.laps.pick_fastest()
+            tel = fastest_lap.get_telemetry()
+            track_shape = [{"x": float(x), "y": float(y)} for x, y in zip(tel['X'].to_numpy()[::4], tel['Y'].to_numpy()[::4])]
+        except Exception:
+            track_shape = []
 
-    try:
-        fps = 25
-        dt = 1 / fps
-        
+        # 4. Nomes e Cores
+        driver_metadata = {}
+        driver_colors_rgb = race_telemetry.get('driver_colors', {})
+        for drv_num in session.drivers:
+            try:
+                info = session.get_driver(drv_num)
+                code = info["Abbreviation"]
+                rgb = driver_colors_rgb.get(code, (128, 128, 128))
+                driver_metadata[code] = {
+                    "name": info["FullName"],
+                    "color": f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+                }
+            except:
+                continue
+
+        # 5. Inicia a transmissão
+        print(f"🚀 Transmitindo {len(frames)} frames...")
         for frame in frames:
             frame['metadata'] = driver_metadata
-            frame['track_shape'] = track_shape  # <--- Injeta a pista no frame
-            server.broadcast(frame)
-            time.sleep(dt) 
+            frame['track_shape'] = track_shape
+            frame['event_name'] = event_name
             
-        print("Transmissão da corrida concluída!")
-        
-    except KeyboardInterrupt:
-        print("\nEncerrando servidor...")
-    finally:
-        server.stop()
+            await websocket.send(json.dumps(frame))
+            await asyncio.sleep(1 / 25) # 25 FPS
+            
+        print("🏁 Transmissão concluída!")
+
+    except websockets.exceptions.ConnectionClosed:
+        print("🔴 Cliente desconectou (Voltou ao menu).")
+    except Exception as e:
+        print(f"❌ Erro: {e}")
+
+async def main_server():
+    host, port = "localhost", 9999
+    print(f"📡 Backend rodando aguardando conexões em ws://{host}:{port}")
+    # Inicia o servidor e atende requisições continuamente
+    async with websockets.serve(stream_telemetry, host, port):
+        await asyncio.Future()
 
 if __name__ == "__main__":
-    target_year = 2024
-    target_round = 1
-    target_session = 'R'
-
-    if len(sys.argv) > 1:
-        target_year = int(sys.argv[1])
-    if len(sys.argv) > 2:
-        target_round = int(sys.argv[2])
-    if len(sys.argv) > 3:
-        target_session = sys.argv[3]
-
-    main(target_year, target_round, target_session)
+    asyncio.run(main_server())
